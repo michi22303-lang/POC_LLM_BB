@@ -3,6 +3,6 @@ streamlit-authenticator==0.3.3
 pandas
 google-generativeai
 openai
-mistralai
+mistralai>=1.0.0
 anthropic
 groq
