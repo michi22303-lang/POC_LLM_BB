@@ -9,8 +9,8 @@ from datetime import datetime
 # --- ECHTE API CLIENTS ---
 import google.generativeai as genai
 from openai import OpenAI
-from mistralai.client import MistralClient
-from mistralai.models.chat_completion import ChatMessage
+# NEU: Der neue Mistral Client (v1.0+)
+from mistralai import Mistral
 import anthropic
 from groq import Groq
 
@@ -25,7 +25,6 @@ USERS = {
     "tester":       {"name": "Test User",    "password": "Start123!", "email": "team@sbh.hamburg.de"}
 }
 
-# DAS 6-MODELLE-PORTFOLIO
 MODELS = {
     "gemini-1.5-flash": {
         "name": "Google Gemini Flash ⚡", "provider": "google", "input": 0.10, "output": 0.40
@@ -61,7 +60,7 @@ for i, username in enumerate(usernames):
         "email": USERS[username]["email"]
     }
 
-authenticator = stauth.Authenticate(credentials, "sbh_cookie_v5", "key_v5_sixmodels", 30)
+authenticator = stauth.Authenticate(credentials, "sbh_cookie_v6", "key_v6_fix", 30)
 
 # --- 3. LOGIC ---
 def get_api_key(provider):
@@ -76,7 +75,7 @@ def get_llm_response(model_key, messages_history, file_content=None):
     
     # --- MOCK SIMULATION ---
     if MOCK_MODE:
-        time.sleep(1.0 if provider != "groq" else 0.2) # Groq ist schneller!
+        time.sleep(1.0 if provider != "groq" else 0.2) 
         prefix = f"**[MOCK {conf['name']}]:** "
         last_prompt = messages_history[-1]["content"]
         
@@ -114,22 +113,26 @@ def get_llm_response(model_key, messages_history, file_content=None):
                 resp = client.chat.completions.create(model=model_key, messages=msgs)
                 return resp.choices[0].message.content, resp.usage.prompt_tokens, resp.usage.completion_tokens
 
-            # 3. MISTRAL
+            # 3. MISTRAL (UPDATED FÜR v1.0)
             elif provider == "mistral":
-                client = MistralClient(api_key=api_key)
-                m_msgs = []
+                client = Mistral(api_key=api_key)
+                
+                # Neue Version nutzt einfache Listen (wie OpenAI), kein ChatMessage Objekt mehr nötig!
+                mistral_msgs = []
                 for m in messages_history:
-                    c = m["content"]
-                    if m == messages_history[-1] and file_content: c += f"\n\nDokument:\n{file_content[:10000]}"
-                    m_msgs.append(ChatMessage(role=m["role"], content=c))
-                resp = client.chat(model=model_key, messages=m_msgs)
+                    content = m["content"]
+                    if m == messages_history[-1] and file_content:
+                        content += f"\n\nDokument:\n{file_content[:10000]}"
+                    mistral_msgs.append({"role": m["role"], "content": content})
+
+                resp = client.chat.complete(model=model_key, messages=mistral_msgs)
+                
+                # Zugriff auf Antwort hat sich leicht geändert in v1.0
                 return resp.choices[0].message.content, resp.usage.prompt_tokens, resp.usage.completion_tokens
 
-            # 4. ANTHROPIC (CLAUDE)
+            # 4. ANTHROPIC
             elif provider == "anthropic":
                 client = anthropic.Anthropic(api_key=api_key)
-                # Claude mag keine System-Rolle in der History, wir nutzen einfaches Mapping
-                # Für diesen Pilot senden wir nur den Prompt + File, um History-Errors zu vermeiden (simpel)
                 last_msg = messages_history[-1]["content"]
                 if file_content: last_msg += f"\n\nDokument:\n{file_content[:10000]}"
                 
@@ -138,10 +141,9 @@ def get_llm_response(model_key, messages_history, file_content=None):
                     max_tokens=1024,
                     messages=[{"role": "user", "content": last_msg}]
                 )
-                # Token Usage bei Claude ist im Header, hier vereinfacht:
                 return message.content[0].text, message.usage.input_tokens, message.usage.output_tokens
 
-            # 5. GROQ (LLAMA)
+            # 5. GROQ
             elif provider == "groq":
                 client = Groq(api_key=api_key)
                 msgs = list(messages_history)
