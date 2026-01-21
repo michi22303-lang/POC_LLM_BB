@@ -4,3 +4,5 @@ pandas
 google-generativeai
 openai
 mistralai
+anthropic
+groq
