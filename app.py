@@ -6,10 +6,10 @@ import time
 import random
 from datetime import datetime
 
-# --- 0. SEITEN KONFIGURATION (MUSS GANZ OBEN STEHEN) ---
+# --- 0. PAGE CONFIG ---
 st.set_page_config(page_title="SBH Pilot", page_icon="🤖", layout="wide")
 
-# --- 1. KONFIGURATION & DATEN ---
+# --- 1. CONFIG & DATA ---
 MOCK_MODE = True 
 
 USERS = {
@@ -24,7 +24,7 @@ MODELS = {
     "mistral-large":    {"input": 2.00, "output": 6.00, "name": "Mistral Large 🇪🇺"}
 }
 
-# --- 2. AUTH SETUP ---
+# --- 2. AUTHENTICATION ---
 names = [u["name"] for u in USERS.values()]
 usernames = list(USERS.keys())
 passwords = [u["password"] for u in USERS.values()]
@@ -38,9 +38,9 @@ for i, username in enumerate(usernames):
         "email": USERS[username]["email"]
     }
 
-authenticator = stauth.Authenticate(credentials, "sbh_cookie_modern", "key_modern_123", 30)
+authenticator = stauth.Authenticate(credentials, "sbh_cookie_v2", "key_v2_123", 30)
 
-# --- 3. HELFER FUNKTIONEN ---
+# --- 3. HELPER FUNCTIONS ---
 def save_log(file, data):
     df = pd.DataFrame([data])
     if not os.path.exists(file):
@@ -49,151 +49,136 @@ def save_log(file, data):
         df.to_csv(file, mode='a', header=False, index=False)
 
 def get_response_mock(model_key, prompt):
-    time.sleep(1.2) 
+    time.sleep(1.0) 
     model_name = MODELS[model_key]['name']
     
-    # Simuliere unterschiedliche Längen für Realismus
-    in_tok = len(prompt) * 2
-    out_tok = random.randint(150, 600)
+    # Prefix einbauen (z.B. "Mistral Large: ...")
+    prefix = f"**{model_name}**: "
     
-    responses = [
-        f"Hier ist eine detaillierte Antwort basierend auf dem Modell **{model_name}**.\n\n* Punkt 1: Analyse der Anfrage '{prompt}'\n* Punkt 2: Datenverarbeitung\n* Punkt 3: Ergebnisgenerierung",
-        f"Moin! Als **{model_name}** habe ich folgende Lösung für dich:\n```python\nprint('Hallo SBH')\n```\nFunktioniert das für dich?",
-        f"Das ist eine komplexe Frage. Mit der Rechenkraft von **{model_name}** komme ich zu dem Schluss, dass wir Option B wählen sollten."
+    in_tok = len(prompt) * 2
+    out_tok = random.randint(100, 400)
+    
+    raw_responses = [
+        "Das ist eine relevante Frage für die SBH. Basierend auf den Daten würde ich sagen: Wir sollten Prozess A priorisieren.",
+        "Hier ist der Python-Code, den du wolltest. Er ist effizient und sicher.",
+        "Zusammenfassend lässt sich sagen: Die Kosten sind im Rahmen, aber die Qualität muss überwacht werden."
     ]
-    return random.choice(responses), in_tok, out_tok
+    # Antwort zusammensetzen: Name + Text
+    full_response = prefix + random.choice(raw_responses)
+    
+    return full_response, in_tok, out_tok
 
 def calc_cost(model, in_tok, out_tok):
     return (in_tok/1e6 * MODELS[model]["input"]) + (out_tok/1e6 * MODELS[model]["output"])
 
-# --- 4. APP START ---
+# --- 4. MAIN APP ---
 authenticator.login()
 
 if st.session_state["authentication_status"]:
     user_id = st.session_state["username"]
     
-    # --- SIDEBAR DESIGN ---
+    # --- SIDEBAR ---
     with st.sidebar:
-        st.title("🤖 SBH Pilot")
-        st.write(f"Angemeldet: **{USERS[user_id]['name']}**")
+        st.header("SBH Pilot")
+        st.write(f"User: **{USERS[user_id]['name']}**")
         
-        # Navigation für Admin
         page = "Chat"
         if user_id == "michael.soth":
             st.divider()
-            page = st.radio("Menü", ["💬 Chat", "📊 Admin Dashboard"], index=0)
+            page = st.radio("Navigation", ["💬 Chat & Eingabe", "📊 Admin Dashboard"])
         
         st.divider()
         authenticator.logout('Abmelden', 'sidebar')
 
-    # --- VIEW 1: CHAT ---
-    if page == "💬 Chat":
+    # --- VIEW 1: CHAT MIT EINGABE OBEN ---
+    if page == "💬 Chat & Eingabe":
         
-        # Header Area
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.subheader("KI-Assistenzsystem")
-        with col2:
-            # Modell Auswahl kompakt oben rechts
-            selected_model = st.selectbox("", list(MODELS.keys()), format_func=lambda x: MODELS[x]["name"], label_visibility="collapsed")
+        st.subheader("KI-Abfrage")
 
-        if "messages" not in st.session_state: st.session_state.messages = []
-
-        # Chat History
-        for msg in st.session_state.messages:
-            avatar = "👤" if msg["role"] == "user" else "🤖"
-            with st.chat_message(msg["role"], avatar=avatar):
-                st.write(msg["content"])
-                # Wenn Stats vorhanden sind (in metadata gespeichert), anzeigen
-                if "stats" in msg:
-                    st.caption(f"💰 {msg['stats']}")
-
-        # Input
-        if prompt := st.chat_input("Deine Frage stellen..."):
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            st.chat_message("user", avatar="👤").write(prompt)
-
-            with st.chat_message("assistant", avatar="🤖"):
-                with st.spinner("Generiere Antwort..."):
-                    resp, in_t, out_t = get_response_mock(selected_model, prompt)
+        # 1. BEREICH: AUSWAHL & EINGABE (Ganz oben fixiert)
+        with st.container():
+            # Modellwahl
+            selected_model = st.selectbox(
+                "1. Modell auswählen:", 
+                list(MODELS.keys()), 
+                format_func=lambda x: MODELS[x]["name"]
+            )
+            
+            # Eingabe Formular
+            with st.form("chat_form", clear_on_submit=True):
+                user_input = st.text_area("2. Deine Frage:", height=100, placeholder="Gib hier deine Frage ein...")
+                submitted = st.form_submit_button("🚀 Absenden")
+                
+                if submitted and user_input:
+                    # Logik ausführen
+                    if "messages" not in st.session_state: st.session_state.messages = []
+                    
+                    # User Nachricht speichern
+                    st.session_state.messages.append({"role": "user", "content": user_input})
+                    
+                    # KI Antwort generieren
+                    resp, in_t, out_t = get_response_mock(selected_model, user_input)
                     cost = calc_cost(selected_model, in_t, out_t)
                     
-                    st.markdown(resp)
+                    # Speichern
+                    stats = f"Kosten: ${cost:.5f}"
+                    st.session_state.messages.append({"role": "assistant", "content": resp, "stats": stats})
                     
-                    # Modernes Info-Badge
-                    stats_txt = f"Kosten: ${cost:.5f} ({in_t} In / {out_t} Out)"
-                    st.caption(stats_txt)
+                    save_log("usage.csv", {"time": datetime.now().strftime("%H:%M:%S"), "user": user_id, "model": selected_model, "cost": cost})
                     
-                    # Speichern im State
-                    st.session_state.messages.append({"role": "assistant", "content": resp, "stats": stats_txt})
-                    
-                    save_log("usage.csv", {
-                        "time": datetime.now().strftime("%H:%M:%S"),
-                        "user": user_id, "model": selected_model, "cost": cost
-                    })
-            
-            # Damit das Feedback-Element neu geladen wird
-            st.rerun()
+                    # Seite neu laden, damit die neue Nachricht unten erscheint
+                    st.rerun()
 
-        # FEEDBACK BEREICH (Erscheint nur nach der letzten KI Antwort)
-        if len(st.session_state.messages) > 0 and st.session_state.messages[-1]["role"] == "assistant":
-            st.divider()
-            st.write("Wie war diese Antwort?")
+        st.divider()
+        
+        # 2. BEREICH: CHATVERLAUF (Erscheint darunter)
+        st.subheader("📝 Verlauf (Aktuelle Sitzung)")
+        
+        if "messages" not in st.session_state: st.session_state.messages = []
+        
+        if not st.session_state.messages:
+            st.info("Noch keine Nachrichten. Starte oben eine Anfrage!")
+        
+        # Verlauf rendern (von oben nach unten)
+        for i, msg in enumerate(st.session_state.messages):
+            avatar = "👤" if msg["role"] == "user" else "🤖"
             
-            # MODERNE STERNE BEWERTUNG
-            feedback = st.feedback("stars", key=f"fb_{len(st.session_state.messages)}")
+            # Wir nutzen hier container für bessere Trennung
+            with st.container():
+                with st.chat_message(msg["role"], avatar=avatar):
+                    st.markdown(msg["content"])
+                    if "stats" in msg:
+                        st.caption(msg["stats"])
             
-            if feedback is not None:
-                # Feedback speichern
-                rating = feedback + 1 # Streamlit gibt 0-4 zurück, wir wollen 1-5
-                save_log("feedback.csv", {
-                    "time": datetime.now().strftime("%H:%M:%S"),
-                    "user": user_id, "model": selected_model, "rating": rating
-                })
-                st.toast(f"Danke für {rating} Sterne! ⭐", icon="✅")
+            # Feedback Button nur unter der ALLERLETZTEN Nachricht, wenn sie vom Bot ist
+            if i == len(st.session_state.messages) - 1 and msg["role"] == "assistant":
+                st.write("---")
+                # Feedback direkt hier
+                fb = st.feedback("stars", key=f"feed_{len(st.session_state.messages)}")
+                if fb is not None:
+                    rating = fb + 1
+                    save_log("feedback.csv", {"time": datetime.now().strftime("%H:%M:%S"), "user": user_id, "model": selected_model, "rating": rating})
+                    st.toast(f"Bewertung ({rating} Sterne) gespeichert!", icon="✅")
 
     # --- VIEW 2: ADMIN DASHBOARD ---
     elif page == "📊 Admin Dashboard":
         st.title("Admin Cockpit")
-        st.markdown("Überblick über Kosten und Qualität.")
         
         if os.path.exists("usage.csv"):
-            df_usage = pd.read_csv("usage.csv")
-            total = df_usage["cost"].sum()
-            count = len(df_usage)
+            df = pd.read_csv("usage.csv")
+            c1, c2 = st.columns(2)
+            c1.metric("Gesamtkosten", f"${df['cost'].sum():.4f}")
+            c2.metric("Anzahl Prompts", len(df))
             
-            # Moderne KPI Karten
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Gesamtkosten", f"${total:.4f}")
-            c2.metric("Anfragen gesamt", count)
-            c3.metric("Nutzer aktiv", df_usage["user"].nunique())
+            st.subheader("Nutzung pro Modell")
+            st.bar_chart(df.groupby("model")["cost"].sum())
             
-            st.divider()
-            
-            c_chart1, c_chart2 = st.columns(2)
-            
-            with c_chart1:
-                st.subheader("Kosten pro Modell")
-                cost_chart = df_usage.groupby("model")["cost"].sum()
-                st.bar_chart(cost_chart, color="#FF4B4B") # Streamlit Rot
-            
-            with c_chart2:
-                if os.path.exists("feedback.csv"):
-                    st.subheader("Qualität (Sterne)")
-                    df_feed = pd.read_csv("feedback.csv")
-                    # Durchschnitt berechnen
-                    avg = df_feed.groupby("model")["rating"].mean()
-                    st.bar_chart(avg, color="#00CC96") # Grün
-                else:
-                    st.info("Noch kein Feedback.")
-
-            with st.expander("Detaillierte Rohdaten ansehen"):
-                st.dataframe(df_usage.sort_values("time", ascending=False), use_container_width=True)
-
+            st.subheader("Letzte Logs")
+            st.dataframe(df.tail(10))
         else:
-            st.info("Noch keine Daten vorhanden. Starte den ersten Chat!")
+            st.info("Keine Daten.")
 
 elif st.session_state["authentication_status"] is False:
-    st.error('Passwort falsch')
+    st.error('Falsches Passwort')
 elif st.session_state["authentication_status"] is None:
-    st.warning('Bitte anmelden.')
+    st.warning('Bitte einloggen')
