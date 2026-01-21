@@ -7,7 +7,7 @@ import random
 from datetime import datetime
 
 # --- 0. PAGE CONFIG ---
-st.set_page_config(page_title="SBH Pilot", page_icon="🤖", layout="wide")
+st.set_page_config(page_title="LLM Pilot Bildungsbau", page_icon="🤖", layout="wide")
 
 # --- 1. CONFIG & MOCK DATA ---
 MOCK_MODE = True 
