@@ -151,7 +151,7 @@ if st.session_state["authentication_status"]:
 
     # --- VIEW 1: CHAT ---
     if page == "💬 Chat":
-        st.title("🤖 SBH KI-Pilot")
+        st.title("🤖 LLM-Pilot")
         
         # Chat History rendern
         for msg in st.session_state.messages:
