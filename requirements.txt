@@ -1,0 +1,6 @@
+streamlit
+streamlit-authenticator
+pandas
+google-generativeai
+openai
+mistralai
